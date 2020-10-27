@@ -15,9 +15,11 @@ namespace Hospitality.Harmony
             [HarmonyPostfix]
             public static void Postfix(ref bool __result, LocalTargetInfo dest, TraverseParms traverseParams)
             {
-                if (!__result) return;
+                if (!__result || traverseParams.pawn == null) return;
+                if (traverseParams.pawn.mapIndexOrState < 0) return;
+                if (GuestUtility.CachedMapComponents[traverseParams.pawn.mapIndexOrState].presentGuests.Count == 0) return;
 
-                // Cheaper to check this before IsGuest
+                // Cheaper to check this before IsGuest 
                 var area = traverseParams.pawn.GetGuestArea();
                 if (area == null) return;
                 if (!traverseParams.pawn.IsArrivedGuest()) return;

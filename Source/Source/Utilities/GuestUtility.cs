@@ -41,7 +41,6 @@ namespace Hospitality
         private static readonly RulePackDef rulePackSentence_CharmAttemptAccepted = RulePackDef.Named("Sentence_CharmAttemptAccepted");
         private static readonly RulePackDef rulePackSentence_CharmAttemptRejected = RulePackDef.Named("Sentence_CharmAttemptRejected");
 
-
         private static readonly string labelRecruitSuccess = "LetterLabelMessageRecruitSuccess".Translate(); // from core
         private static readonly string labelRecruitFactionAnger = "LetterLabelRecruitFactionAnger".Translate();
         private static readonly string labelRecruitFactionPlease = "LetterLabelRecruitFactionPlease".Translate();
@@ -64,8 +63,9 @@ namespace Hospitality
 
         public static RoyalTitleDef[] AllTitles { get; private set; }
         public static Faction[] DistinctFactions { get; private set; }
-        public static Dictionary<Pawn, bool> validGuest = new Dictionary<Pawn, bool>();
 
+        public static Hospitality_MapComponent[] CachedMapComponents = null;
+            
         /// <summary>
         /// For things that need to be loaded at map start
         /// </summary>
@@ -73,7 +73,6 @@ namespace Hospitality
         {
             List<Faction> factions = new List<Faction>();
             List<RoyalTitleDef> titles = new List<RoyalTitleDef>();
-
 
             foreach (var faction in Find.FactionManager.AllFactions.Where(f => f.def.HasRoyalTitles))
             {
@@ -107,12 +106,16 @@ namespace Hospitality
 
         public static bool IsArrivedGuest(this Pawn pawn, bool makeValidPawnCheck = true)
         {
-            return IsGuestInternal(pawn, true, makeValidPawnCheck);
+            if (pawn == null || (int)pawn.mapIndexOrState < 0) return false;
+            if (CachedMapComponents[pawn.mapIndexOrState].presentGuests.Count == 0) return false;
+            return CachedMapComponents[pawn.mapIndexOrState].presentGuests.Contains(pawn);
         }
 
         public static bool IsGuest(this Pawn pawn, bool makeValidPawnCheck = true)
         {
-            return IsGuestInternal(pawn, false, makeValidPawnCheck);
+            if (pawn == null || (int)pawn.mapIndexOrState < 0) return false;
+            if (CachedMapComponents[pawn.mapIndexOrState].presentGuests.Count == 0) return false;
+            return CachedMapComponents[pawn.mapIndexOrState].presentGuests.Contains(pawn);
         }
 
         private static bool IsGuestInternal(this Pawn pawn, bool makeArrivedCheck, bool makeValidPawnCheck = true)

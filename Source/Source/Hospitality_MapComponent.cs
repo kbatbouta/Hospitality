@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Annotations;
@@ -21,7 +22,8 @@ namespace Hospitality
         private int nextGuestListCheck;
 
         public List<Lord> PresentLords { get; } = new List<Lord>();
-        public IEnumerable<Pawn> PresentGuests => PresentLords.SelectMany(lord => lord.ownedPawns);
+        public HashSet<Pawn> presentGuests = new HashSet<Pawn>();
+        public IEnumerable<Pawn> PresentGuests => presentGuests;
 
         public override void ExposeData()
         {
@@ -38,7 +40,7 @@ namespace Hospitality
         }
 
         [UsedImplicitly]
-        public Hospitality_MapComponent(Map map) : base(map) {}
+        public Hospitality_MapComponent(Map map) : base(map) { }
 
         public Hospitality_MapComponent(bool forReal, Map map) : base(map)
         {
@@ -49,22 +51,31 @@ namespace Hospitality
             defaultAreaRestriction = map.areaManager.Home;
             
             RefreshGuestListTotal();
+
+            if (GuestUtility.CachedMapComponents.Length < Find.Maps.Count)
+            {
+                Array.Resize(ref GuestUtility.CachedMapComponents, Find.Maps.Count + 6); // This does Array.Copy for us.
+            }
         }
 
         public void RefreshGuestListTotal()
         {
             PresentLords.Clear();
             PresentLords.AddRange(map.lordManager.lords.Where(l => l.CurLordToil?.GetType() == typeof(LordToil_VisitPoint)));
+
+            presentGuests = PresentLords.SelectMany(lord => lord.ownedPawns).ToHashSet();
         }
 
         public void OnLordArrived(Lord lord)
         {
             PresentLords.AddDistinct(lord);
+            presentGuests = PresentLords.SelectMany(lord => lord.ownedPawns).ToHashSet();
         }
 
         public void OnLordLeft(Lord lord)
         {
             PresentLords.Remove(lord);
+            presentGuests = PresentLords.SelectMany(lord => lord.ownedPawns).ToHashSet();
         }
 
         public override void MapComponentTick()
