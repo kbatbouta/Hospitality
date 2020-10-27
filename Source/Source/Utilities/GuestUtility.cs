@@ -18,9 +18,29 @@ namespace Hospitality
     {
         public const int InteractIntervalAbsoluteMin = 360; // changed from 120
         public const int MaxOpinionForEnemy = -20;
+
+        private static readonly MethodInfo addNeed = typeof(Pawn_NeedsTracker).GetMethod("AddNeed", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly HediffDef hediffDeathAcidifier = DefDatabase<HediffDef>.GetNamedSilentFail("DeathAcidifier");
         public static readonly DutyDef relaxDef = DefDatabase<DutyDef>.GetNamed("Relax");
         private static readonly TraderKindDef traderKindDef = DefDatabase<TraderKindDef>.GetNamed("Guest");
         private static readonly JobDef therapyJobDef = DefDatabase<JobDef>.GetNamedSilentFail("ReceiveTherapy");
+        private static readonly ConceptDef conceptRecruitGuest = ConceptDef.Named("RecruitGuest");
+        private static readonly TaleDef taleRecruited = TaleDef.Named("Recruited");
+
+        private static readonly NeedDef needJoy = DefDatabase<NeedDef>.GetNamed("Joy");
+        private static readonly NeedDef needComfort = DefDatabase<NeedDef>.GetNamed("Comfort");
+
+        private static readonly ThoughtDef thoughtGuestPaidFee = ThoughtDef.Named("GuestPaidFee");
+        private static readonly ThoughtDef thoughtEndorsedByRecruiter = ThoughtDef.Named("EndorsedByRecruiter");
+        private static readonly ThoughtDef thoughtGuestOffendedRelationship = ThoughtDef.Named("GuestOffendedRelationship");
+        private static readonly ThoughtDef thoughtGuestPleasedRelationship = ThoughtDef.Named("GuestPleasedRelationship");
+        private static readonly ThoughtDef thoughtGuestDismissiveAttitude = ThoughtDef.Named("GuestDismissiveAttitude");
+        private static readonly ThoughtDef thoughtGuestAngered = ThoughtDef.Named("GuestAngered");
+        private static readonly ThoughtDef forcedRecruitment = ThoughtDef.Named("GuestRecruitmentForced");
+
+        private static readonly RulePackDef rulePackSentence_CharmAttemptAccepted = RulePackDef.Named("Sentence_CharmAttemptAccepted");
+        private static readonly RulePackDef rulePackSentence_CharmAttemptRejected = RulePackDef.Named("Sentence_CharmAttemptRejected");
+
 
         private static readonly string labelRecruitSuccess = "LetterLabelMessageRecruitSuccess".Translate(); // from core
         private static readonly string labelRecruitFactionAnger = "LetterLabelRecruitFactionAnger".Translate();
@@ -44,6 +64,7 @@ namespace Hospitality
 
         public static RoyalTitleDef[] AllTitles { get; private set; }
         public static Faction[] DistinctFactions { get; private set; }
+        public static Dictionary<Pawn, bool> validGuest = new Dictionary<Pawn, bool>();
 
         /// <summary>
         /// For things that need to be loaded at map start
@@ -52,6 +73,8 @@ namespace Hospitality
         {
             List<Faction> factions = new List<Faction>();
             List<RoyalTitleDef> titles = new List<RoyalTitleDef>();
+
+
             foreach (var faction in Find.FactionManager.AllFactions.Where(f => f.def.HasRoyalTitles))
             {
                 factions.Add(faction);
@@ -362,8 +385,7 @@ namespace Hospitality
         {
             if (pawn.needs.joy == null)
             {
-                var addNeed = typeof(Pawn_NeedsTracker).GetMethod("AddNeed", BindingFlags.Instance | BindingFlags.NonPublic);
-                addNeed.Invoke(pawn.needs, new object[] {DefDatabase<NeedDef>.GetNamed("Joy")});
+                addNeed.Invoke(pawn.needs, new object[] { needJoy });
             }
 
             pawn.needs.joy.CurLevel = Rand.Range(0, 0.5f);
@@ -373,8 +395,7 @@ namespace Hospitality
         {
             if (pawn.needs.comfort == null)
             {
-                var addNeed = typeof(Pawn_NeedsTracker).GetMethod("AddNeed", BindingFlags.Instance | BindingFlags.NonPublic);
-                addNeed.Invoke(pawn.needs, new object[] {DefDatabase<NeedDef>.GetNamed("Comfort")});
+                addNeed.Invoke(pawn.needs, new object[] { needComfort });
             }
 
             pawn.needs.comfort.CurLevel = Rand.Range(0, 0.5f);
@@ -426,10 +447,10 @@ namespace Hospitality
 
         public static void Recruit(Pawn guest, int recruitPenalty, bool forced)
         {
-            PlayerKnowledgeDatabase.KnowledgeDemonstrated(ConceptDef.Named("RecruitGuest"), KnowledgeAmount.Total);
+            PlayerKnowledgeDatabase.KnowledgeDemonstrated(conceptRecruitGuest, KnowledgeAmount.Total);
 
             if (forced)
-                GainThought(guest, ThoughtDef.Named("GuestRecruitmentForced"));
+                GainThought(guest, forcedRecruitment);
 
             Find.LetterStack.ReceiveLetter(labelRecruitSuccess, (forced ? txtForcedRecruit : txtRecruitSuccess).Translate(guest), LetterDefOf.PositiveEvent, guest, guest.Faction);
 
@@ -485,7 +506,7 @@ namespace Hospitality
             }
 
             var taleParams = new object[] {guest.MapHeld.mapPawns.FreeColonistsSpawned.RandomElement(), guest};
-            TaleRecorder.RecordTale(TaleDef.Named("Recruited"), taleParams);
+            TaleRecorder.RecordTale(taleRecruited, taleParams);
         }
 
         public static void Adopt(this Pawn guest)
@@ -565,11 +586,10 @@ namespace Hospitality
 
         public static void UpsetAboutFee(this Pawn pawn, int cost)
         {
-            var thoughtDef = ThoughtDef.Named("GuestPaidFee");
             var amount = cost / 10;
             for (int i = 0; i < amount; i++)
             {
-                var thoughtMemory = (Thought_Memory) ThoughtMaker.MakeThought(thoughtDef);
+                var thoughtMemory = (Thought_Memory) ThoughtMaker.MakeThought(thoughtGuestPaidFee);
                 pawn?.needs?.mood?.thoughts?.memories?.TryGainMemory(thoughtMemory); // *cough* Extra defensive
             }
         }
@@ -690,7 +710,7 @@ namespace Hospitality
 
             if (pawns.TryRandomElement(out var target))
             {
-                GainSocialThought(target, guest, ThoughtDef.Named("EndorsedByRecruiter"));
+                GainSocialThought(target, guest, thoughtEndorsedByRecruiter);
 
                 //Log.Message(recruiter.NameStringShort + " endorsed " + target + " to " + guest.Name);
             }
@@ -727,10 +747,10 @@ namespace Hospitality
                     Messages.Message("RecruitAngerMultiple".Translate(recruiter.Name.ToStringShort, guest.Name.ToStringShort, amount), guest, MessageTypeDefOf.NegativeEvent);
                 }
 
-                extraSentencePacks.Add(RulePackDef.Named("Sentence_CharmAttemptRejected"));
+                extraSentencePacks.Add(rulePackSentence_CharmAttemptRejected);
                 for (int i = 0; i < multiplier; i++)
                 {
-                    GainSocialThought(recruiter, guest, ThoughtDef.Named("GuestOffendedRelationship"));
+                    GainSocialThought(recruiter, guest, thoughtGuestOffendedRelationship);
                 }
 
                 MoteMaker.ThrowText((recruiter.DrawPos + guest.DrawPos) / 2f, recruiter.Map, "TextMote_CharmFail".Translate() + multiplierText, 8f);
@@ -749,23 +769,23 @@ namespace Hospitality
                     if (focusOnRecruiting)
                         EndorseColonists(recruiter, guest);
                     else
-                        GainSocialThought(recruiter, guest, ThoughtDef.Named("GuestPleasedRelationship"));
+                        GainSocialThought(recruiter, guest, thoughtGuestPleasedRelationship);
                 }
 
                 // And then one more of the other
                 multiplier++;
                 if (focusOnRecruiting)
-                    GainSocialThought(recruiter, guest, ThoughtDef.Named("GuestPleasedRelationship"));
+                    GainSocialThought(recruiter, guest, thoughtGuestPleasedRelationship);
                 else
                     EndorseColonists(recruiter, guest);
 
-                extraSentencePacks.Add(RulePackDef.Named("Sentence_CharmAttemptAccepted"));
+                extraSentencePacks.Add(rulePackSentence_CharmAttemptAccepted);
 
                 string multiplierText = multiplier > 1 ? " x" + multiplier : Empty;
                 MoteMaker.ThrowText((recruiter.DrawPos + guest.DrawPos) / 2f, recruiter.Map, "TextMote_CharmSuccess".Translate() + multiplierText, 8f);
             }
 
-            GainThought(guest, ThoughtDef.Named("GuestDismissiveAttitude"));
+            GainThought(guest, thoughtGuestDismissiveAttitude);
         }
 
         public static void DoAllowedAreaSelectors(Rect rect, Func<Area, string> getLabel, ref Area currentArea)
@@ -877,8 +897,8 @@ namespace Hospitality
             {
                 if (ally != guest && !ally.Dead && ally.Spawned)
                 {
-                    GainThought(ally, ThoughtDef.Named("GuestAngered"));
-                    GainThought(ally, ThoughtDef.Named("GuestDismissiveAttitude"));
+                    GainThought(ally, thoughtGuestAngered);
+                    GainThought(ally, thoughtGuestDismissiveAttitude);
                 }
             }
         }
@@ -962,8 +982,6 @@ namespace Hospitality
             lord.Map?.GetMapComponent()?.OnLordArrived(lord);
             MainTabWindowUtility.NotifyAllPawnTables_PawnsChanged();
         }
-
-        private static readonly HediffDef hediffDeathAcidifier = DefDatabase<HediffDef>.GetNamedSilentFail("DeathAcidifier");
 
         public static bool HasDeathAcidifier(this Pawn pawn)
         {
